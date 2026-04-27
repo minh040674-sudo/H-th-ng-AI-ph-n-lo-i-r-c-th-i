@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🌿 EcoSort AI – Hệ Thống Phân Loại Rác Thông Minh</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Teachable Machine -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;800&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">♻</span>
+      <div>
+        <span class="logo-title">EcoSort <em>AI</em></span>
+        <span class="logo-sub">Hệ thống phân loại rác thông minh</span>
+      </div>
+    </div>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="camera">📷 Nhận diện</button>
+      <button class="tab-btn" data-tab="dashboard">📊 Dashboard</button>
+      <button class="tab-btn" data-tab="guide">📖 Hướng dẫn</button>
+    </nav>
+    <div class="score-badge">
+      <span class="score-label">Điểm hôm nay</span>
+      <span class="score-value" id="scoreDisplay">0</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ TAB: CAMERA / RECOGNITION ═══════════════ -->
+<section class="tab-panel active" id="tab-camera">
+  <div class="main-grid">
+
+    <!-- LEFT: Camera & AI -->
+    <div class="card camera-card">
+      <div class="card-header">
+        <h2>🎥 Camera AI</h2>
+        <div class="status-dot" id="statusDot"></div>
+      </div>
+
+      <div class="video-wrap">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none"></canvas>
+        <div class="video-overlay" id="videoOverlay">
+          <span>Nhấn "Bật Camera" để bắt đầu</span>
+        </div>
+        <div class="scan-line" id="scanLine"></div>
+      </div>
+
+      <div class="cam-controls">
+        <button class="btn btn-primary" id="startBtn" onclick="startCamera()">▶ Bật Camera</button>
+        <button class="btn btn-danger" id="stopBtn" onclick="stopCamera()" disabled>⏹ Tắt Camera</button>
+        <button class="btn btn-accent" id="captureBtn" onclick="captureAndClassify()" disabled>📸 Nhận Diện Ngay</button>
+      </div>
+
+      <!-- Confidence bars -->
+      <div class="conf-panel" id="confPanel" style="display:none">
+        <h4>Độ tin cậy mô hình</h4>
+        <div id="confBars"></div>
+      </div>
+    </div>
+
+    <!-- MIDDLE: Quiz + Result -->
+    <div class="center-col">
+
+      <!-- QUIZ PANEL -->
+      <div class="card quiz-card" id="quizPanel" style="display:none">
+        <div class="quiz-header">
+          <span class="quiz-icon">🤔</span>
+          <h3>Thử Thách Phân Loại!</h3>
+        </div>
+        <p class="quiz-question">Bạn nghĩ rác trong ảnh thuộc loại nào?</p>
+        <div class="quiz-options" id="quizOptions"></div>
+        <div class="quiz-feedback" id="quizFeedback"></div>
+      </div>
+
+      <!-- RESULT PANEL -->
+      <div class="card result-card" id="resultPanel" style="display:none">
+        <div class="result-header">
+          <div class="result-icon-big" id="resultIcon">♻</div>
+          <div>
+            <h3 id="resultTitle">Chưa có kết quả</h3>
+            <p id="resultConf" class="result-conf"></p>
+          </div>
+        </div>
+
+        <!-- LED Lights -->
+        <div class="led-row" id="ledRow">
+          <div class="led-item" data-type="thuc-pham">
+            <div class="led green"></div><span>Thực phẩm</span>
+          </div>
+          <div class="led-item" data-type="giay-carton">
+            <div class="led yellow"></div><span>Giấy/Carton</span>
+          </div>
+          <div class="led-item" data-type="chai-nhua-thuy-tinh">
+            <div class="led blue"></div><span>Chai nhựa/TT</span>
+          </div>
+          <div class="led-item" data-type="tui-nilon-ong-hut">
+            <div class="led red"></div><span>Túi nilon/ống hút</span>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div class="arrow-guide" id="arrowGuide">
+          <div class="bin-arrow">
+            <span class="arrow-label" id="arrowLabel">↓</span>
+            <div class="bin-icon" id="binIcon">🗑</div>
+            <p id="binLabel">Bỏ vào thùng này</p>
+          </div>
+        </div>
+
+        <!-- Eco message -->
+        <div class="eco-message" id="ecoMessage"></div>
+
+        <!-- Capacity Warning -->
+        <div class="capacity-warning" id="capacityWarning" style="display:none"></div>
+
+        <button class="btn btn-success btn-full" id="confirmBtn" onclick="confirmClassification()" style="display:none">
+          ✅ Xác nhận đã bỏ rác
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stats sidebar -->
+    <div class="card stats-card">
+      <h3>📦 Thống kê hôm nay</h3>
+      <div class="mini-stats" id="miniStats">
+        <div class="stat-row">
+          <span class="stat-emoji">🍎</span>
+          <span class="stat-name">Thực phẩm thừa</span>
+          <span class="stat-count" id="cnt-thuc-pham">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-emoji">📦</span>
+          <span class="stat-name">Giấy & Carton</span>
+          <span class="stat-count" id="cnt-giay-carton">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-emoji">🍾</span>
+          <span class="stat-name">Chai nhựa/Thủy tinh</span>
+          <span class="stat-count" id="cnt-chai-nhua-thuy-tinh">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-emoji">🛍</span>
+          <span class="stat-name">Túi nilon/Ống hút</span>
+          <span class="stat-count" id="cnt-tui-nilon-ong-hut">0</span>
+        </div>
+        <div class="stat-row total-row">
+          <span class="stat-emoji">📊</span>
+          <span class="stat-name">Tổng cộng</span>
+          <span class="stat-count" id="cnt-total">0</span>
+        </div>
+      </div>
+
+      <div class="mini-pie-wrap">
+        <canvas id="miniPieChart"></canvas>
+      </div>
+
+      <!-- Score board -->
+      <div class="scoreboard">
+        <h4>🏆 Bảng Thành Tích</h4>
+        <div class="score-grid">
+          <div class="score-item correct">
+            <span id="correctCount">0</span>
+            <label>Đúng</label>
+          </div>
+          <div class="score-item wrong">
+            <span id="wrongCount">0</span>
+            <label>Sai</label>
+          </div>
+          <div class="score-item total-score">
+            <span id="totalScore">0</span>
+            <label>Điểm</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent log -->
+      <h4 style="margin-top:16px;font-size:0.8rem;color:var(--muted)">🕒 Lịch sử gần đây</h4>
+      <div class="log-list" id="logList"></div>
+
+      <button class="btn btn-outline btn-full" onclick="exportCSV()">⬇ Xuất CSV</button>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════ TAB: DASHBOARD ═══════════════ -->
+<section class="tab-panel" id="tab-dashboard">
+  <div class="dashboard-grid">
+
+    <div class="card dash-card full-width">
+      <div class="dash-header">
+        <h2>📊 Bảng Điều Khiển Thống Kê</h2>
+        <div class="filter-row">
+          <button class="filter-btn active" data-filter="day">Hôm nay</button>
+          <button class="filter-btn" data-filter="week">Tuần này</button>
+          <button class="filter-btn" data-filter="month">Tháng này</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="card kpi-card">
+      <span class="kpi-icon">🗑</span>
+      <div>
+        <p class="kpi-label">Tổng rác hôm nay</p>
+        <p class="kpi-value" id="kpiTotal">0</p>
+      </div>
+    </div>
+    <div class="card kpi-card">
+      <span class="kpi-icon">🌱</span>
+      <div>
+        <p class="kpi-label">Tỷ lệ phân loại đúng</p>
+        <p class="kpi-value" id="kpiAcc">—</p>
+      </div>
+    </div>
+    <div class="card kpi-card">
+      <span class="kpi-icon">🏆</span>
+      <div>
+        <p class="kpi-label">Điểm tích lũy</p>
+        <p class="kpi-value" id="kpiScore">0</p>
+      </div>
+    </div>
+    <div class="card kpi-card">
+      <span class="kpi-icon">⚠</span>
+      <div>
+        <p class="kpi-label">Cảnh báo sức chứa</p>
+        <p class="kpi-value" id="kpiWarnings">0</p>
+      </div>
+    </div>
+
+    <!-- Pie Chart -->
+    <div class="card chart-card">
+      <h3>🥧 Tỷ lệ phân loại</h3>
+      <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+    </div>
+
+    <!-- Bar Chart -->
+    <div class="card chart-card wide">
+      <h3>📈 Lượng rác theo giờ</h3>
+      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+
+    <!-- Auto Report -->
+    <div class="card report-card full-width">
+      <h3>📝 Báo cáo tự động</h3>
+      <div id="autoReport" class="report-content"></div>
+      <button class="btn btn-primary" onclick="generateReport()">🔄 Cập nhật báo cáo</button>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════ TAB: GUIDE ═══════════════ -->
+<section class="tab-panel" id="tab-guide">
+  <div class="guide-grid">
+    <div class="card guide-main">
+      <h2>📖 Hướng Dẫn Sử Dụng & Tích Hợp Dữ Liệu</h2>
+
+      <h3>🚀 Cách chạy ứng dụng</h3>
+      <ol class="guide-steps">
+        <li>Tải về 3 file: <code>index.html</code>, <code>style.css</code>, <code>script.js</code> và đặt cùng một thư mục</li>
+        <li>Mở terminal tại thư mục đó, chạy: <code>npx serve .</code> hoặc dùng VS Code Live Server</li>
+        <li>Truy cập <code>http://localhost:3000</code> trên trình duyệt</li>
+        <li>Nhấn "Bật Camera" → hệ thống sẽ tải mô hình Teachable Machine</li>
+      </ol>
+
+      <h3>🗄 Lưu trữ vào Google Sheets (khuyến nghị)</h3>
+      <div class="code-block">
+        <p><strong>Bước 1:</strong> Tạo Google Sheet mới → Extensions → Apps Script</p>
+        <pre>
+function doPost(e) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const data = JSON.parse(e.postData.contents);
+  sheet.appendRow([
+    data.timestamp,
+    data.type,
+    data.confidence,
+    data.userGuess,
+    data.isCorrect
+  ]);
+  return ContentService.createTextOutput("OK");
+}
+        </pre>
+        <p><strong>Bước 2:</strong> Deploy → New deployment → Web App → Anyone</p>
+        <p><strong>Bước 3:</strong> Copy URL và dán vào biến <code>SHEETS_URL</code> trong <code>script.js</code></p>
+      </div>
+
+      <h3>🔥 Lưu trữ vào Firebase Realtime Database</h3>
+      <div class="code-block">
+        <pre>
+// Trong script.js, thêm:
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, push } from "firebase/database";
+
+const firebaseConfig = { /* config của bạn */ };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+function saveToFirebase(entry) {
+  push(ref(db, 'waste-logs'), entry);
+}
+        </pre>
+      </div>
+
+      <h3>📦 Cấu trúc dữ liệu lưu trữ</h3>
+      <div class="code-block">
+        <pre>
+{
+  "timestamp": "2025-01-15T08:30:00",
+  "type": "tai-che",        // loại rác
+  "typeName": "Tái chế",
+  "confidence": 0.92,       // độ tin cậy AI
+  "userGuess": "huu-co",    // người dùng đoán
+  "isCorrect": false,       // đoán đúng/sai
+  "scoreChange": -1,        // điểm thay đổi
+  "sessionDate": "2025-01-15"
+}
+        </pre>
+      </div>
+    </div>
+
+    <div class="guide-side">
+      <div class="card">
+        <h3>🗑 Bảng phân loại rác</h3>
+        <div class="waste-table">
+          <div class="waste-row green-bg">
+            <strong>🟢 Thực phẩm thừa</strong>
+            <p>Trái cây hỏng, vỏ hoa quả, rau củ thừa, cơm nguội, thức ăn dư...</p>
+          </div>
+          <div class="waste-row yellow-bg">
+            <strong>🟡 Giấy & Bìa carton</strong>
+            <p>Hộp giấy, báo cũ, sách vở, bao bì giấy, thùng carton đựng hàng...</p>
+          </div>
+          <div class="waste-row blue-bg">
+            <strong>🔵 Chai nhựa & Thủy tinh rỗng</strong>
+            <p>Chai nước nhựa PET, chai thủy tinh, lọ thủy tinh sạch, can nhựa...</p>
+          </div>
+          <div class="waste-row red-bg">
+            <strong>🔴 Túi nilon & Ống hút nhựa</strong>
+            <p>Túi ni-lông các loại, ống hút nhựa, màng bọc thực phẩm, bao nilon bẩn...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>💡 Mẹo dùng tốt hơn</h3>
+        <ul class="tip-list">
+          <li>Đặt vật thể rõ ràng trước camera, tránh che khuất</li>
+          <li>Ánh sáng đủ sáng giúp AI nhận diện chính xác hơn</li>
+          <li>Giữ vật thể trong ít nhất 2 giây để AI phân tích</li>
+          <li>Xuất CSV định kỳ để backup dữ liệu</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ TOAST ═══════════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Audio elements -->
+<audio id="audioCorrect" preload="auto">
+  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA..." type="audio/wav">
+</audio>
+
+<script src="script.js"></script>
+</body>
+</html>
